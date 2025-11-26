@@ -3,3 +3,7 @@ transformers
 accelerate
 xformers
 torch
+gradio
+# Use forked gradio_client with bool schema fix
+gradio_client @ git+https://github.com/johndpope/gradio.git@fix-bool-schema-bug#subdirectory=client/python
+lovely-tensors
