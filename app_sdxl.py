@@ -369,14 +369,14 @@ with block:
         **s (HF scale)**: Controls high-frequency/fine details. [1.2-1.4] = sharper output
         """)
         with gr.Row():
-            b1 = gr.Slider(label='b1 (1280ch LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.3,
+            b1 = gr.Slider(label='b1 (1280ch LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                           info="Backbone LF scale for 1280-channel blocks")
-            b2 = gr.Slider(label='b2 (640ch LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.3,
+            b2 = gr.Slider(label='b2 (640ch LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                           info="Backbone LF scale for 640-channel blocks")
         with gr.Row():
-            s1 = gr.Slider(label='s1 (1280ch HF)', minimum=0.0, maximum=2.0, step=0.1, value=1.3,
+            s1 = gr.Slider(label='s1 (1280ch HF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                           info="Backbone HF scale for 1280-channel blocks")
-            s2 = gr.Slider(label='s2 (640ch HF)', minimum=0.0, maximum=2.0, step=0.1, value=1.3,
+            s2 = gr.Slider(label='s2 (640ch HF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                           info="Backbone HF scale for 640-channel blocks")
 
     # ========================================================================
@@ -389,9 +389,9 @@ with block:
         **s_1 (skip HF)**: Preserves fine details from encoder
         """)
         with gr.Row():
-            b1_1 = gr.Slider(label='b1_1 (1280ch skip LF)', minimum=0.0, maximum=2.0, step=0.1, value=0.4,
+            b1_1 = gr.Slider(label='b1_1 (1280ch skip LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                             info="Skip LF scale - lower = cleaner")
-            b2_1 = gr.Slider(label='b2_1 (640ch skip LF)', minimum=0.0, maximum=2.0, step=0.1, value=0.4)
+            b2_1 = gr.Slider(label='b2_1 (640ch skip LF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0)
         with gr.Row():
             s1_1 = gr.Slider(label='s1_1 (1280ch skip HF)', minimum=0.0, maximum=2.0, step=0.1, value=1.0,
                             info="Skip HF scale - preserves details")
@@ -462,7 +462,7 @@ with block:
     with gr.Accordion("Generation Settings", open=True):
         with gr.Row():
             seed = gr.Slider(label='Seed', minimum=0, maximum=1000, step=1, value=42)
-            steps = gr.Slider(label='Steps', minimum=10, maximum=100, step=5, value=30)
+            steps = gr.Slider(label='Steps', minimum=10, maximum=100, step=5, value=20)
 
         with gr.Row():
             types = gr.Slider(
