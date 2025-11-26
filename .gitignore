@@ -1,0 +1,4 @@
+.mcp.json
+*.pyc
+training.log
+debug_output/*

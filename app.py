@@ -1,3 +1,220 @@
+"""
+DMFFT (Diffusion Model Fourier Feature Transform) - Gradio Application
+=======================================================================
+
+This application provides an interactive interface for exploring DMFFT parameters
+with Stable Diffusion. It allows real-time comparison between baseline generation
+and DMFFT-enhanced generation.
+
+================================================================================
+DMFFT PARAMETER REFERENCE GUIDE
+================================================================================
+
+U-NET ARCHITECTURE (SD 2.1):
+----------------------------
+The U-Net decoder has 4 up_blocks that progressively upsample features:
+
+  up_blocks[0]: UpBlock2D         - 1280 channels (highest level)
+  up_blocks[1]: CrossAttnUpBlock2D - 1280 channels (with cross-attention)
+  up_blocks[2]: CrossAttnUpBlock2D - 640 channels
+  up_blocks[3]: CrossAttnUpBlock2D - 320 channels (lowest level)
+
+KEY INSIGHT: CrossAttnUpBlock is the PRIMARY target for quality enhancement!
+- Backbone features (hidden_states) → Control SEMANTICS (object structure)
+- Skip features (res_hidden_states) → Control COLOR and TEXTURE
+
+================================================================================
+PARAMETER NAMING CONVENTION
+================================================================================
+
+Each parameter has a suffix that indicates what it targets:
+
+  Suffix "1":   Targets 1280-channel blocks (high-level semantics)
+  Suffix "2":   Targets 640-channel blocks (mid-level features)
+  Suffix "_1":  Targets skip connections (encoder → decoder pathway)
+  No "_1":      Targets backbone (main decoder pathway)
+
+Examples:
+  b1    = Backbone LF scale for 1280-channel blocks
+  b1_1  = Skip connection LF scale for 1280-channel blocks
+  b2    = Backbone LF scale for 640-channel blocks
+  b2_1  = Skip connection LF scale for 640-channel blocks
+
+================================================================================
+CHANNEL SELECTION (k parameters) - Which channels to modify
+================================================================================
+
+  k1:    Fraction of backbone channels to modify in 1280ch blocks (0.0-1.0)
+  k2:    Fraction of backbone channels to modify in 640ch blocks
+  k1_1:  Fraction of skip channels to modify in 1280ch blocks
+  k2_1:  Fraction of skip channels to modify in 640ch blocks
+
+  - k=0.0: No channels modified (DMFFT disabled for this path)
+  - k=0.5: First 50% of channels modified
+  - k=1.0: All channels modified (full DMFFT effect)
+
+  Higher k = More global changes to structure/style
+
+================================================================================
+BACKBONE SCALING (b/s parameters) - Control main decoder features
+================================================================================
+
+LOW-FREQUENCY SCALING (b = "backbone LF"):
+  b1:    LF scale for 1280ch backbone → Controls coarse structure
+  b2:    LF scale for 640ch backbone → Controls shape/form
+
+  RECOMMENDED VALUES: [1.2 - 1.4]
+  - b > 1.0: Amplifies low-frequency (enhances semantic structure)
+  - b < 1.0: Reduces coarse structure (softer output)
+  - Paper finding: b=1.3 gives good semantic enhancement
+
+HIGH-FREQUENCY SCALING (s = "backbone HF"):
+  s1:    HF scale for 1280ch backbone → Controls fine semantic details
+  s2:    HF scale for 640ch backbone → Controls texture/edges
+
+  RECOMMENDED VALUES: [1.2 - 1.4]
+  - s > 1.0: Sharpens high-frequency details
+  - s < 1.0: Smooths/blurs details
+  - Paper finding: s=1.3 improves sharpness
+
+================================================================================
+SKIP CONNECTION SCALING (b_1/s_1 parameters) - Control encoder features
+================================================================================
+
+SKIP LF SCALING (b_1):
+  b1_1:  Skip LF scale for 1280ch → Color consistency at high level
+  b2_1:  Skip LF scale for 640ch → Color/texture distribution
+
+  RECOMMENDED VALUES: [0.0 - 0.8] for CLARITY
+  - Lower values = Cleaner, less blurry results
+  - Paper finding: b_1=0.4 significantly improves clarity
+
+SKIP HF SCALING (s_1):
+  s1_1:  Skip HF scale for 1280ch → Fine detail preservation
+  s2_1:  Skip HF scale for 640ch → Texture detail from encoder
+
+  RECOMMENDED VALUES: [0.8 - 1.2]
+  - s_1 ≈ 1.0: Preserve original encoder details
+  - s_1 > 1.0: Enhance encoder texture details
+
+================================================================================
+FREQUENCY THRESHOLD (t parameters) - Define low/high frequency boundary
+================================================================================
+
+  t1:    Threshold for 1280ch backbone (pixels from spectrum center)
+  t2:    Threshold for 640ch backbone
+  t1_1:  Threshold for 1280ch skip
+  t2_1:  Threshold for 640ch skip
+
+  - t=1: Very small LF region (mostly HF manipulation)
+  - t=5: Moderate LF region
+  - t=10: Large LF region
+
+  RECOMMENDED VALUES: 1-5 for most applications
+
+================================================================================
+GLOBAL SCALING (g parameters) - Pre-FFT multiplier
+================================================================================
+
+  g1:    Global scale for 1280ch backbone (applied BEFORE FFT)
+  g2:    Global scale for 640ch backbone
+  g1_1:  Global scale for 1280ch skip
+  g2_1:  Global scale for 640ch skip
+
+  - g=1.0: No global change (default)
+  - g > 1.0: Overall feature amplification
+  - g < 1.0: Overall feature reduction
+
+================================================================================
+AMPLITUDE SCALING (a parameters) - Fourier magnitude control
+================================================================================
+
+  a1:    Amplitude scale for 1280ch backbone
+  a2:    Amplitude scale for 640ch backbone
+  a1_1:  Amplitude scale for 1280ch skip
+  a2_1:  Amplitude scale for 640ch skip
+
+  - Amplitude = magnitude of frequency components
+  - a > 1.0: Increases contrast/intensity
+  - a < 1.0: Reduces contrast
+
+================================================================================
+PHASE SCALING (p parameters) - Fourier phase control (USE WITH CAUTION!)
+================================================================================
+
+  p1:    Phase scale for 1280ch backbone
+  p2:    Phase scale for 640ch backbone
+  p1_1:  Phase scale for 1280ch skip
+  p2_1:  Phase scale for 640ch skip
+
+  - Phase encodes SPATIAL POSITION and STRUCTURE
+  - p=1.0: Preserve original phase (RECOMMENDED)
+  - p≠1.0: May cause spatial distortions
+
+================================================================================
+BLEND TYPE - How amplitude/phase scaling is applied
+================================================================================
+
+  blend1, blend2, blend1_1, blend2_1
+
+  Values:
+    -1: No FFT applied (only global_scale used)
+     0: Apply a/p scaling to ENTIRE frequency spectrum
+     1: Apply a/p scaling only to LOW frequencies
+     2: Apply a/p scaling only to HIGH frequencies (RECOMMENDED)
+     3: LF amplitude + HF phase scaling
+     4: HF amplitude + LF phase scaling
+
+================================================================================
+ITERATION CONTROL - Which ResNet blocks to modify
+================================================================================
+
+  skips:   Number of ResNet blocks to SKIP before applying DMFFT
+  tunes:   Number of ResNet blocks to APPLY DMFFT to (after skips)
+
+  Example with skips=1, tunes=2:
+    Block 0: SKIP (no DMFFT)
+    Block 1: TUNE (DMFFT applied)
+    Block 2: TUNE (DMFFT applied)
+    Block 3+: No more tuning
+
+================================================================================
+TYPE MODES - Processing algorithm selection
+================================================================================
+
+  types=0: No modification (baseline)
+  types=1: Simple channel scaling + fourier_filter on skip
+  types=2: Direct channel scaling without FFT
+  types=3: Adaptive scaling based on feature statistics (slow)
+  types=4: Full fourier_solo (RECOMMENDED for DMFFT)
+  types=5: Channel-dimension-aware fourier_solo
+
+================================================================================
+RECOMMENDED SETTINGS FOR IMAGE ENHANCEMENT
+================================================================================
+
+For general quality improvement:
+  types=4, blend=2 (apply HF scaling only)
+  k1=0.5, k2=0.5, k1_1=1.0, k2_1=1.0
+  b1=1.3, b2=1.3       (enhance backbone LF for better semantics)
+  b1_1=0.4, b2_1=0.4   (reduce skip LF for clarity)
+  s1=1.3, s2=1.3       (enhance backbone HF for sharpness)
+  s1_1=1.0, s2_1=1.0   (preserve skip HF details)
+  t1=2, t2=2
+  a1=1.0, a2=1.0, p1=1.0, p2=1.0  (neutral amplitude/phase)
+  g1=1.0, g2=1.0
+  skips=0, tunes=3
+
+For maximum sharpness:
+  Increase s1, s2 to 1.4-1.5
+
+For better color consistency:
+  Increase b1, b2 to 1.4
+  Decrease b1_1, b2_1 to 0.2-0.3
+
+================================================================================
+"""
+
 import gradio as gr
 
 import torch
@@ -7,12 +224,16 @@ from diffusers import StableDiffusionPipeline
 from utils import register_tune_upblock2d, register_tune_crossattn_upblock2d
 
 
-# model_id = "stabilityai/stable-diffusion-v1-1"
-# model_id = "stabilityai/stable-diffusion-v1-2"
-# model_id = "stabilityai/stable-diffusion-v1-3"
-# model_id = "stabilityai/stable-diffusion-v1-4"
-# model_id = "stabilityai/stable-diffusion-v1-5"
-model_id = "stabilityai/stable-diffusion-2-1"
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+# Available Stable Diffusion models:
+# model_id = "stabilityai/stable-diffusion-v1-1"  # Original SD 1.1
+# model_id = "stabilityai/stable-diffusion-v1-2"  # SD 1.2
+# model_id = "stabilityai/stable-diffusion-v1-3"  # SD 1.3
+# model_id = "stabilityai/stable-diffusion-v1-4"  # SD 1.4 (popular)
+# model_id = "stabilityai/stable-diffusion-v1-5"  # SD 1.5 (most used)
+model_id = "stabilityai/stable-diffusion-2-1"     # SD 2.1 (higher resolution)
 
 pip_model = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
 pip_model = pip_model.to("cuda")
