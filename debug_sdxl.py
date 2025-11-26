@@ -22,7 +22,18 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Callable
 from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
 from logger import logger
+
+# Enable lovely_tensors for colorful tensor visualization
+try:
+    import lovely_tensors as lt
+    lt.monkey_patch()
+    LOVELY_TENSORS_AVAILABLE = True
+except ImportError:
+    LOVELY_TENSORS_AVAILABLE = False
+    logger.warning("lovely_tensors not available, using standard visualization")
 
 
 def _get_set_debug_capture():
@@ -244,47 +255,122 @@ class SDXLDebugger:
         path: Path,
         title: str = ""
     ):
-        """Save feature maps as image grid."""
+        """Save feature maps as image grid using lovely_tensors for color."""
         try:
-            grid = self._tensor_to_grid(x)
-            img = Image.fromarray(grid)
-
-            # Add info text
             b, c, h, w = x.shape
             logger.debug(f"Saving {title}: shape={x.shape}, path={path}")
 
-            img.save(path)
+            if LOVELY_TENSORS_AVAILABLE:
+                # Use lovely_tensors for colorful visualization
+                self._save_with_lovely_tensors(x, path, title)
+            else:
+                # Fallback to standard colormap
+                grid = self._tensor_to_grid(x)
+                img = Image.fromarray(grid)
+                img.save(path)
         except Exception as e:
             logger.error(f"Failed to save feature grid: {e}")
 
+    def _save_with_lovely_tensors(
+        self,
+        x: torch.Tensor,
+        path: Path,
+        title: str = ""
+    ):
+        """Save tensor visualization using lovely_tensors."""
+        import lovely_tensors as lt
+
+        x = x[0].detach().cpu()  # Take first batch [C, H, W]
+        c, h, w = x.shape
+
+        # Sample channels
+        n_channels = min(c, self.config.sample_channels)
+        indices = torch.linspace(0, c - 1, n_channels).long()
+        x_sampled = x[indices]
+
+        # Create figure with subplots
+        ncol = 4
+        nrow = (n_channels + ncol - 1) // ncol
+        fig, axes = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
+        if nrow == 1:
+            axes = axes.reshape(1, -1)
+
+        # Use different colormaps for visual variety
+        colormaps = ['viridis', 'plasma', 'magma', 'inferno', 'cividis', 'turbo']
+
+        for idx in range(n_channels):
+            row, col = idx // ncol, idx % ncol
+            ax = axes[row, col]
+
+            # Normalize channel
+            ch = x_sampled[idx]
+            ch_norm = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
+
+            # Apply colormap - cycle through colormaps
+            cmap = plt.get_cmap(colormaps[idx % len(colormaps)])
+            im = ax.imshow(ch_norm.numpy(), cmap=cmap, aspect='auto')
+            ax.set_title(f'Ch {indices[idx].item()}', fontsize=8, color='white')
+            ax.axis('off')
+
+            # Add colorbar
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+        # Hide unused subplots
+        for idx in range(n_channels, nrow * ncol):
+            row, col = idx // ncol, idx % ncol
+            axes[row, col].axis('off')
+
+        fig.suptitle(title, fontsize=10, color='white')
+        fig.patch.set_facecolor('#1a1a2e')
+
+        for ax_row in axes:
+            for ax in ax_row:
+                ax.set_facecolor('#1a1a2e')
+
+        plt.tight_layout()
+        plt.savefig(path, facecolor='#1a1a2e', edgecolor='none', dpi=100, bbox_inches='tight')
+        plt.close(fig)
+
     def _save_latent_visualization(self, latent: torch.Tensor, timestep: int):
-        """Save latent visualization."""
+        """Save latent visualization with colorful colormaps and colorbars."""
         try:
             path = self.gen_dir / f"latent_t{timestep:04d}.png"
 
             # Latent is [B, 4, H, W] - visualize all 4 channels
             lat = latent[0].detach().cpu()
 
-            # Normalize each channel
-            lat_norm = []
-            for i in range(4):
-                ch = lat[i]
-                ch = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
-                lat_norm.append(ch.numpy())
-
-            # Create 2x2 grid with different colormaps per channel
-            h, w = lat_norm[0].shape
-            grid = np.zeros((h * 2, w * 2, 3), dtype=np.float32)
+            # Create figure with 2x2 subplots
+            fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 
             colormaps = ['plasma', 'viridis', 'magma', 'inferno']
-            for i, (lat_ch, cmap_name) in enumerate(zip(lat_norm, colormaps)):
-                cmap = plt.get_cmap(cmap_name)
-                colored = cmap(lat_ch)[:, :, :3]
-                row, col = i // 2, i % 2
-                grid[row*h:(row+1)*h, col*w:(col+1)*w] = colored
+            channel_names = ['Latent Ch 0', 'Latent Ch 1', 'Latent Ch 2', 'Latent Ch 3']
 
-            img = Image.fromarray((grid * 255).astype(np.uint8))
-            img.save(path)
+            for i in range(4):
+                row, col = i // 2, i % 2
+                ax = axes[row, col]
+
+                ch = lat[i]
+                ch_norm = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
+
+                cmap = plt.get_cmap(colormaps[i])
+                im = ax.imshow(ch_norm.numpy(), cmap=cmap, aspect='auto')
+                ax.set_title(f'{channel_names[i]} (t={timestep})', fontsize=10, color='white')
+                ax.axis('off')
+
+                # Add colorbar with stats
+                cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                cbar.ax.tick_params(colors='white', labelsize=8)
+
+            fig.suptitle(f'Latent Space - Timestep {timestep}', fontsize=12, color='cyan')
+            fig.patch.set_facecolor('#1a1a2e')
+
+            for ax_row in axes:
+                for ax in ax_row:
+                    ax.set_facecolor('#1a1a2e')
+
+            plt.tight_layout()
+            plt.savefig(path, facecolor='#1a1a2e', edgecolor='none', dpi=100, bbox_inches='tight')
+            plt.close(fig)
 
             logger.debug(f"Saved latent t={timestep} to {path}")
         except Exception as e:
@@ -296,7 +382,7 @@ class SDXLDebugger:
         path: Path,
         title: str = ""
     ):
-        """Save FFT magnitude spectrum visualization."""
+        """Save FFT magnitude spectrum visualization with colorful colormaps."""
         try:
             x = x[0].detach().cpu().float()  # First batch
             c, h, w = x.shape
@@ -304,12 +390,23 @@ class SDXLDebugger:
             # Sample channels
             n_channels = min(c, self.config.sample_channels)
             indices = torch.linspace(0, c - 1, n_channels).long()
-            x = x[indices]
+            x_sampled = x[indices]
 
-            # Compute FFT magnitude for each channel
-            fft_mags = []
-            for i in range(n_channels):
-                ch = x[i]
+            # Create figure with subplots
+            ncol = 4
+            nrow = (n_channels + ncol - 1) // ncol
+            fig, axes = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
+            if nrow == 1:
+                axes = axes.reshape(1, -1)
+
+            # Spectral colormaps for FFT visualization
+            fft_colormaps = ['turbo', 'jet', 'nipy_spectral', 'gist_rainbow', 'rainbow', 'hsv']
+
+            for idx in range(n_channels):
+                row, col = idx // ncol, idx % ncol
+                ax = axes[row, col]
+
+                ch = x_sampled[idx]
                 ch_fft = fft.fft2(ch)
                 ch_fft = fft.fftshift(ch_fft)
                 mag = torch.abs(ch_fft)
@@ -317,57 +414,91 @@ class SDXLDebugger:
                 mag = torch.log1p(mag)
                 # Normalize
                 mag = (mag - mag.min()) / (mag.max() - mag.min() + 1e-8)
-                fft_mags.append(mag.numpy())
 
-            # Create grid with colormap
-            ncol = 4
-            nrow = (n_channels + ncol - 1) // ncol
-            grid = np.zeros((nrow * h, ncol * w), dtype=np.float32)
+                # Apply colormap - cycle through spectral colormaps
+                cmap = plt.get_cmap(fft_colormaps[idx % len(fft_colormaps)])
+                im = ax.imshow(mag.numpy(), cmap=cmap, aspect='auto')
+                ax.set_title(f'Ch {indices[idx].item()} FFT', fontsize=8, color='white')
+                ax.axis('off')
 
-            for idx, mag in enumerate(fft_mags):
-                row = idx // ncol
-                col = idx % ncol
-                grid[row * h:(row + 1) * h, col * w:(col + 1) * w] = mag
+                # Add colorbar
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-            # Use 'hot' colormap for FFT (looks like thermal/frequency viz)
-            cmap = plt.get_cmap('hot')
-            grid_rgb = cmap(grid)[:, :, :3]
-            img = Image.fromarray((grid_rgb * 255).astype(np.uint8))
-            img.save(path)
+            # Hide unused subplots
+            for idx in range(n_channels, nrow * ncol):
+                row, col = idx // ncol, idx % ncol
+                axes[row, col].axis('off')
+
+            fig.suptitle(f'{title} - Frequency Domain', fontsize=10, color='white')
+            fig.patch.set_facecolor('#0a0a1a')
+
+            for ax_row in axes:
+                for ax in ax_row:
+                    ax.set_facecolor('#0a0a1a')
+
+            plt.tight_layout()
+            plt.savefig(path, facecolor='#0a0a1a', edgecolor='none', dpi=100, bbox_inches='tight')
+            plt.close(fig)
 
             logger.debug(f"Saved FFT analysis to {path}")
         except Exception as e:
             logger.error(f"Failed to save FFT analysis: {e}")
 
     def create_latent_evolution_gif(self):
-        """Create animated GIF showing latent evolution."""
+        """Create animated GIF showing latent evolution with colorful matplotlib frames."""
         if not self.config.enabled or not self.latent_history:
             return
 
         try:
+            import io
             frames = []
             colormaps = ['plasma', 'viridis', 'magma', 'inferno']
+            channel_names = ['Ch 0', 'Ch 1', 'Ch 2', 'Ch 3']
+
+            total_steps = len(self.latent_history)
 
             for i, lat in enumerate(self.latent_history):
                 lat = lat[0]  # First batch
 
-                # Create 2x2 grid of channels with colormaps
-                lat_norm = []
+                # Create figure with 2x2 subplots
+                fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+
                 for j in range(4):
-                    ch = lat[j]
-                    ch = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
-                    lat_norm.append(ch.numpy())
-
-                h, w = lat_norm[0].shape
-                grid = np.zeros((h * 2, w * 2, 3), dtype=np.float32)
-
-                for j, (lat_ch, cmap_name) in enumerate(zip(lat_norm, colormaps)):
-                    cmap = plt.get_cmap(cmap_name)
-                    colored = cmap(lat_ch)[:, :, :3]
                     row, col = j // 2, j % 2
-                    grid[row*h:(row+1)*h, col*w:(col+1)*w] = colored
+                    ax = axes[row, col]
 
-                frames.append(Image.fromarray((grid * 255).astype(np.uint8)))
+                    ch = lat[j]
+                    ch_norm = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
+
+                    cmap = plt.get_cmap(colormaps[j])
+                    im = ax.imshow(ch_norm.numpy(), cmap=cmap, aspect='auto')
+                    ax.set_title(channel_names[j], fontsize=10, color='white')
+                    ax.axis('off')
+
+                    # Add colorbar
+                    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                    cbar.ax.tick_params(colors='white', labelsize=6)
+
+                # Calculate progress and timestep info
+                progress = (i + 1) / total_steps * 100
+                fig.suptitle(f'Latent Evolution - Step {i+1}/{total_steps} ({progress:.0f}%)',
+                           fontsize=12, color='cyan', fontweight='bold')
+
+                fig.patch.set_facecolor('#1a1a2e')
+                for ax_row in axes:
+                    for ax in ax_row:
+                        ax.set_facecolor('#1a1a2e')
+
+                plt.tight_layout()
+
+                # Save figure to buffer
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png', facecolor='#1a1a2e',
+                           edgecolor='none', dpi=80, bbox_inches='tight')
+                buf.seek(0)
+                frames.append(Image.open(buf).copy())
+                buf.close()
+                plt.close(fig)
 
             if frames:
                 gif_path = self.gen_dir / "latent_evolution.gif"
@@ -375,7 +506,7 @@ class SDXLDebugger:
                     gif_path,
                     save_all=True,
                     append_images=frames[1:],
-                    duration=200,
+                    duration=300,  # 300ms per frame
                     loop=0
                 )
                 logger.info(f"Saved latent evolution GIF to {gif_path}")
