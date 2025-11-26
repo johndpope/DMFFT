@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMFFT SDXL Visualizer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 50%, #0a1a2a 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            background: linear-gradient(90deg, #00d4ff, #ff00d4, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }
+        .controls {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .slider { width: 200px; }
+        .btn {
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid #00d4ff;
+            color: #00d4ff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn:hover { background: rgba(0, 212, 255, 0.4); }
+        .btn.active { background: rgba(0, 212, 255, 0.5); }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 15px;
+        }
+        .card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card:hover {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+        .card-header {
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .card-header.crossattn { background: linear-gradient(90deg, rgba(255,100,100,0.3), rgba(255,150,50,0.3)); border-bottom: 2px solid #ff6464; }
+        .card-header.upblock { background: linear-gradient(90deg, rgba(100,200,100,0.3), rgba(50,255,150,0.3)); border-bottom: 2px solid #64ff64; }
+        .card-images {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            padding: 2px;
+        }
+        .card-images img {
+            width: 100%;
+            height: auto;
+            background: #111;
+        }
+        .img-label {
+            font-size: 0.7em;
+            color: #888;
+            text-align: center;
+            padding: 2px;
+            background: rgba(0,0,0,0.5);
+        }
+        .latent-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .latent-section img {
+            max-width: 400px;
+            border-radius: 8px;
+        }
+        .stats { font-size: 0.8em; color: #888; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>DMFFT SDXL Architecture Visualizer</h1>
+
+    <div class="controls">
+        <label>Timestep: <input type="range" class="slider" id="slider" min="0" max="6" value="0"></label>
+        <span id="tDisplay">t=925.0</span>
+        <button class="btn" id="playBtn" onclick="togglePlay()">▶ Play</button>
+        <div>
+            <button class="btn active" onclick="setType('backbone')">Backbone</button>
+            <button class="btn" onclick="setType('skip')">Skip</button>
+            <button class="btn" onclick="setType('backbone_fft')">FFT</button>
+            <button class="btn" onclick="setType('skip_fft')">Skip FFT</button>
+        </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <div class="latent-section">
+        <h3 style="color: #888; margin-bottom: 10px;">Latent Evolution</h3>
+        <img src="debug_output/gen_0002/latent_evolution.gif" alt="Latent Evolution" onerror="this.style.display='none'">
+    </div>
+
+    <script>
+        const blocks = [{"name": "CrossAttnUpBlock2D_1280ch_block0", "type": "CrossAttnUpBlock2D", "channels": 1280, "block_idx": 0, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block0_t0_skip_fft.png"}}}, {"name": "CrossAttnUpBlock2D_1280ch_block1", "type": "CrossAttnUpBlock2D", "channels": 1280, "block_idx": 1, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block1_t0_skip_fft.png"}}}, {"name": "CrossAttnUpBlock2D_1280ch_block2", "type": "CrossAttnUpBlock2D", "channels": 1280, "block_idx": 2, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_1280ch_block2_t0_skip_fft.png"}}}, {"name": "CrossAttnUpBlock2D_640ch_block1", "type": "CrossAttnUpBlock2D", "channels": 640, "block_idx": 1, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block1_t0_skip_fft.png"}}}, {"name": "CrossAttnUpBlock2D_640ch_block2", "type": "CrossAttnUpBlock2D", "channels": 640, "block_idx": 2, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t0_backbone_fft.png", "skip": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t0_skip.png", "skip_fft": "debug_output/gen_0002/CrossAttnUpBlock2D_640ch_block2_t0_skip_fft.png"}}}, {"name": "UpBlock2D_block0", "type": "UpBlock2D", "channels": 320, "block_idx": 0, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block0_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block0_t0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block0_t0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block0_t0_skip_fft.png"}}}, {"name": "UpBlock2D_block1", "type": "UpBlock2D", "channels": 320, "block_idx": 1, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block1_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block1_t0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block1_t0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block1_t0_skip_fft.png"}}}, {"name": "UpBlock2D_block2", "type": "UpBlock2D", "channels": 320, "block_idx": 2, "timesteps": ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"], "images": {"925.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t925.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t925.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t925.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t925.0_skip_fft.png"}, "760.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t760.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t760.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t760.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t760.0_skip_fft.png"}, "595.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t595.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t595.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t595.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t595.0_skip_fft.png"}, "430.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t430.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t430.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t430.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t430.0_skip_fft.png"}, "265.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t265.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t265.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t265.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t265.0_skip_fft.png"}, "100.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t100.0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t100.0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t100.0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t100.0_skip_fft.png"}, "0.0": {"backbone": "debug_output/gen_0002/UpBlock2D_block2_t0_backbone.png", "backbone_fft": "debug_output/gen_0002/UpBlock2D_block2_t0_backbone_fft.png", "skip": "debug_output/gen_0002/UpBlock2D_block2_t0_skip.png", "skip_fft": "debug_output/gen_0002/UpBlock2D_block2_t0_skip_fft.png"}}}];
+        const timesteps = ["925.0", "760.0", "595.0", "430.0", "265.0", "100.0", "0.0"];
+        let currentT = timesteps[0];
+        let imageType = 'backbone';
+        let playing = false;
+        let interval;
+
+        function render() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+
+            blocks.forEach(block => {
+                const images = block.images[currentT] || {};
+                const headerClass = block.type.includes('CrossAttn') ? 'crossattn' : 'upblock';
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-header ${headerClass}">
+                        <span>${block.name.replace(/_/g, ' ')}</span>
+                        <span style="color: #888">${block.channels}ch</span>
+                    </div>
+                    <div class="card-images">
+                        <div>
+                            ${images.backbone ? `<img src="${images.backbone}" alt="backbone">` : '<div style="height:100px;background:#222"></div>'}
+                            <div class="img-label">Backbone</div>
+                        </div>
+                        <div>
+                            ${images.skip ? `<img src="${images.skip}" alt="skip">` : '<div style="height:100px;background:#222"></div>'}
+                            <div class="img-label">Skip</div>
+                        </div>
+                        <div>
+                            ${images.backbone_fft ? `<img src="${images.backbone_fft}" alt="fft">` : '<div style="height:100px;background:#222"></div>'}
+                            <div class="img-label">Backbone FFT</div>
+                        </div>
+                        <div>
+                            ${images.skip_fft ? `<img src="${images.skip_fft}" alt="skip_fft">` : '<div style="height:100px;background:#222"></div>'}
+                            <div class="img-label">Skip FFT</div>
+                        </div>
+                    </div>
+                    <div class="stats">Block ${block.block_idx} | ${block.timesteps.length} timesteps</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        document.getElementById('slider').addEventListener('input', (e) => {
+            currentT = timesteps[e.target.value];
+            document.getElementById('tDisplay').textContent = 't=' + currentT;
+            render();
+        });
+
+        function setType(t) {
+            imageType = t;
+            document.querySelectorAll('.controls .btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            render();
+        }
+
+        function togglePlay() {
+            playing = !playing;
+            const btn = document.getElementById('playBtn');
+            if (playing) {
+                btn.textContent = '⏸ Pause';
+                btn.classList.add('active');
+                interval = setInterval(() => {
+                    const slider = document.getElementById('slider');
+                    slider.value = (parseInt(slider.value) + 1) % timesteps.length;
+                    currentT = timesteps[slider.value];
+                    document.getElementById('tDisplay').textContent = 't=' + currentT;
+                    render();
+                }, 500);
+            } else {
+                btn.textContent = '▶ Play';
+                btn.classList.remove('active');
+                clearInterval(interval);
+            }
+        }
+
+        render();
+    </script>
+</body>
+</html>

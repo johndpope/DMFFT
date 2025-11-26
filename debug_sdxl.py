@@ -21,6 +21,7 @@ from PIL import Image
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Callable
 from dataclasses import dataclass, field
+import matplotlib.pyplot as plt
 from logger import logger
 
 
@@ -225,13 +226,16 @@ class SDXLDebugger:
 
         grid = np.zeros((nrow_actual * h, ncol * w), dtype=np.float32)
 
+        # Use colormap for vibrant visualization
+        cmap = plt.get_cmap('viridis')
+
         for idx in range(n_channels):
             row = idx // ncol
             col = idx % ncol
             grid[row * h:(row + 1) * h, col * w:(col + 1) * w] = x[idx].numpy()
 
-        # Convert to RGB (grayscale repeated)
-        grid_rgb = np.stack([grid] * 3, axis=-1)
+        # Apply colormap for colorful output
+        grid_rgb = cmap(grid)[:, :, :3]  # Get RGB, discard alpha
         return (grid_rgb * 255).astype(np.uint8)
 
     def _save_feature_grid(
@@ -268,13 +272,16 @@ class SDXLDebugger:
                 ch = (ch - ch.min()) / (ch.max() - ch.min() + 1e-8)
                 lat_norm.append(ch.numpy())
 
-            # Create 2x2 grid
+            # Create 2x2 grid with different colormaps per channel
             h, w = lat_norm[0].shape
-            grid = np.zeros((h * 2, w * 2), dtype=np.float32)
-            grid[:h, :w] = lat_norm[0]
-            grid[:h, w:] = lat_norm[1]
-            grid[h:, :w] = lat_norm[2]
-            grid[h:, w:] = lat_norm[3]
+            grid = np.zeros((h * 2, w * 2, 3), dtype=np.float32)
+
+            colormaps = ['plasma', 'viridis', 'magma', 'inferno']
+            for i, (lat_ch, cmap_name) in enumerate(zip(lat_norm, colormaps)):
+                cmap = plt.get_cmap(cmap_name)
+                colored = cmap(lat_ch)[:, :, :3]
+                row, col = i // 2, i % 2
+                grid[row*h:(row+1)*h, col*w:(col+1)*w] = colored
 
             img = Image.fromarray((grid * 255).astype(np.uint8))
             img.save(path)
@@ -312,7 +319,7 @@ class SDXLDebugger:
                 mag = (mag - mag.min()) / (mag.max() - mag.min() + 1e-8)
                 fft_mags.append(mag.numpy())
 
-            # Create grid
+            # Create grid with colormap
             ncol = 4
             nrow = (n_channels + ncol - 1) // ncol
             grid = np.zeros((nrow * h, ncol * w), dtype=np.float32)
@@ -322,7 +329,10 @@ class SDXLDebugger:
                 col = idx % ncol
                 grid[row * h:(row + 1) * h, col * w:(col + 1) * w] = mag
 
-            img = Image.fromarray((grid * 255).astype(np.uint8))
+            # Use 'hot' colormap for FFT (looks like thermal/frequency viz)
+            cmap = plt.get_cmap('hot')
+            grid_rgb = cmap(grid)[:, :, :3]
+            img = Image.fromarray((grid_rgb * 255).astype(np.uint8))
             img.save(path)
 
             logger.debug(f"Saved FFT analysis to {path}")
@@ -336,10 +346,12 @@ class SDXLDebugger:
 
         try:
             frames = []
+            colormaps = ['plasma', 'viridis', 'magma', 'inferno']
+
             for i, lat in enumerate(self.latent_history):
                 lat = lat[0]  # First batch
 
-                # Create 2x2 grid of channels
+                # Create 2x2 grid of channels with colormaps
                 lat_norm = []
                 for j in range(4):
                     ch = lat[j]
@@ -347,11 +359,13 @@ class SDXLDebugger:
                     lat_norm.append(ch.numpy())
 
                 h, w = lat_norm[0].shape
-                grid = np.zeros((h * 2, w * 2), dtype=np.float32)
-                grid[:h, :w] = lat_norm[0]
-                grid[:h, w:] = lat_norm[1]
-                grid[h:, :w] = lat_norm[2]
-                grid[h:, w:] = lat_norm[3]
+                grid = np.zeros((h * 2, w * 2, 3), dtype=np.float32)
+
+                for j, (lat_ch, cmap_name) in enumerate(zip(lat_norm, colormaps)):
+                    cmap = plt.get_cmap(cmap_name)
+                    colored = cmap(lat_ch)[:, :, :3]
+                    row, col = j // 2, j % 2
+                    grid[row*h:(row+1)*h, col*w:(col+1)*w] = colored
 
                 frames.append(Image.fromarray((grid * 255).astype(np.uint8)))
 
